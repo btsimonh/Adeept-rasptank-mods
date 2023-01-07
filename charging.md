@@ -41,3 +41,5 @@ Once the battery voltage has achieved 'charged' state, the pic will power up the
 On power on, the RPi3b tank software will determine if it is connected to a charge station, and of so, back away, so disconnecting itself, and then resume it's business.
 
 
+
+
