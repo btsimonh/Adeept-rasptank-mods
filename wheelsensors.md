@@ -14,3 +14,4 @@ The available IR sensors are rather large for the small robot, but one should fi
 
 
 The Adeept motor hat has two unused RGB sockets which present Vcc, gnd and two GPIOs from the RPi, and these can be used for the IR sensor digital outputs. 
+
