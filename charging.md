@@ -41,5 +41,7 @@ Once the battery voltage has achieved 'charged' state, the pic will power up the
 On power on, the RPi3b tank software will determine if it is connected to a charge station, and of so, back away, so disconnecting itself, and then resume it's business.
 
 
-
-
+Since the pico has a diode from USB +5v to it's power, we can power the pico from the RPi3b USB - which also may allos USB communication when the RPi3b is powered up.
+We can then diode in 5v from the charger USB on VSYS (pin 39....) to power the pico when the RPi3b is powered down.
+The USB connection also conveniently will provide GND to the Pico, so reducing out external connections.
+This arrangement also allows us to program the pico from the RPIi3b if necessary.
