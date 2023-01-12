@@ -33,5 +33,6 @@ gstreamer_str = "sudo gst-launch-1.0 shmsrc ! gdpdepay ! appsink drop=1"
 cap = cv2.VideoCapture(gstreamer_str, cv2.CAP_GSTREAMER)
 
 
-
+gstreamer installation that worked (see last post):
+https://forums.raspberrypi.com/viewtopic.php?t=297550
 

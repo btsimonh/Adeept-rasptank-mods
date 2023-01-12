@@ -11,8 +11,10 @@ charge via a separate cable..  so will need to add a 2nd 2 pin socket for this.
 For self charge, I purchased a simple 2S BMS - it has connections for the three battery connections and a P+/P- pair for input/output.  
 Note that once connected to the batteries, this BMS needs to be 'woken' by connecting the charger to the P+/P- connections before it will output any voltage.
 
-For charging, I'm not after a specifically fast charge, so chose a 1A 2S USB-C input charger.  
-This combined with a magnetic USB-C connector and std USB wallwart will make manual charging simple, if a little slow.
+For charging, I'm not after a specifically fast charge, so chose a 1A 2S USB-C input charger.
+Search [DDTCCRUB Lithium Battery Charging Board](https://www.amazon.co.uk/DDTCCRUB-Lithium-Battery-Charging-Protection/dp/B09RGC8QQT/ref=sr_1_3?crid=U8SB6KODSZ8Q&keywords=2s+3a+usb+charger+board&qid=1673183805&sprefix=2s+3a+usb+charger+boar%2Caps%2C71&sr=8-3) - but the 4A version is more appropriate for these batteries, allowing ~2.5A at 8.4 volts - availablle from chinese sites.
+
+This combined with a magnetic USB-C connector and std USB wallwart will make manual charging simple, if a little slow (unless you go for the 4A version).
 
 This may also be 'just enough' to run the RPi3b for extended software development.  I can always upgrade it later...
 
@@ -43,5 +45,9 @@ On power on, the RPi3b tank software will determine if it is connected to a char
 
 Since the pico has a diode from USB +5v to it's power, we can power the pico from the RPi3b USB - which also may allos USB communication when the RPi3b is powered up.
 We can then diode in 5v from the charger USB on VSYS (pin 39....) to power the pico when the RPi3b is powered down.
-The USB connection also conveniently will provide GND to the Pico, so reducing out external connections.
+The USB connection also conveniently will provide GND to the Pico, so reducing our external connections.
 This arrangement also allows us to program the pico from the RPIi3b if necessary.
+
+
+see
+https://www.balena.io/blog/enabling-deep-sleep-for-your-raspberry-pi-project/
