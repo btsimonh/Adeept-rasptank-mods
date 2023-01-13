@@ -3,6 +3,8 @@
 ##Summary:
 
 On RPi3b with bullseye, ~45% cpu to stream h264 to webrtc with decent low latency with raw video frames passing through OpenCV (640x480).  ~1.5Mbits
+(648x480@25 -> ~45%cpu on node)
+(648x480@60 -> ~98%cpu on node)
 
 using @u4/opencv4nodejs to build opencv (~2.5 hours, make swap 2048 first).
 using sudo apt-get install janus to get janus.
@@ -28,13 +30,34 @@ else
     server = "https://"+window.location.hostname+":8089/janus";
 ```
 
+
+OpenCV doing edge detect (640x480@25, brg->grey->canny->grey->bgr) -> ~190% cpu for node.
+Still gets 25fps....
+
+Note: using writeAsync reduces normal cpu use to 25% !!
+
+
 ## todo
 
 1/ make opencv4nodejs available to node-red.
     move to global folder?  or to node-red install?
+     this worked:
+     cp -r node_modules/* ../.node-red/node_modules/
+
+     ensure in settings.js:
+        functionGlobalContext: {
+            require:require,
+        },
+
 2/ proxy janus API in node-red.
 3/ reproduce viewing page served from node-red.
+    done.
 4/ auto-start video.
+    Needs a gesture, so enabled controls - you must hit play.
+5/ attempt higher resolution.   
+    at 1280x720, the system crashed (driver blows up, stalling node-red, required reboot - reboot takes AGES)
+    try increase gpu_memory in /boot/config.txt from 128 to 256? - does not fix crash.
+
 
 
 # Notes made whilst investigating
