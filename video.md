@@ -50,6 +50,7 @@ Note: using writeAsync reduces normal cpu use to 25% !!
         },
 
 2/ proxy janus API in node-red.
+    working.
 3/ reproduce viewing page served from node-red.
     done.
 4/ auto-start video.
