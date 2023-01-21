@@ -1,0 +1,561 @@
+[
+    {
+        "id": "bacdbd8243ba188e",
+        "type": "tab",
+        "label": "pigpio test",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "e4ffa2004f26b4eb",
+        "type": "inject",
+        "z": "bacdbd8243ba188e",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 130,
+        "y": 120,
+        "wires": [
+            [
+                "cd337a58bb8360e6"
+            ]
+        ]
+    },
+    {
+        "id": "cd337a58bb8360e6",
+        "type": "function",
+        "z": "bacdbd8243ba188e",
+        "name": "pigpio init",
+        "func": "\n\n\n\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "// Code added here will be run once\n// whenever the node is started.\nconst require = global.get('require');\nnode.warn('before connect');\n\nconst pigpioClient = require('pigpio-client')\n\nlet pigpioConnectTimeout = 10000;\n\nlet host = 'localhost';\nlet pigpio = global.get('pigpio_'+host);\ncontext.host = host;\n\nif (!pigpio){\n    startPigpioClient(context.host);\n}\n\n\nasync function restartPigpioClient(host) {\n    if (!host){\n        host = context.host;\n    }\n    node.send({payload:'end'});\n    node.warn('stopping');\n    await stopPigpioClient(host);\n    setTimeout(async ()=>{\n        node.warn('starting');\n        await startPigpioClient(host);\n    }, 1000);\n}\n\nasync function stopPigpioClient(host) {\n    clearTimeout(context.to);\n    let pigpio = global.get('pigpio_'+host);\n    if (pigpio){\n        pigpio.end();\n        pigpio.killed = true;\n        global.set('pigpio_'+host, undefined);\n    }\n}\n\nfunction startPigpioClient(host){\n    clearTimeout(context.to);\n\n    let pigpio = pigpioClient.pigpio({host: host});\n    node.warn('new pigpio');\n\n    const ready = new Promise((resolve, reject) => {\n      pigpio.once('connected', resolve);\n      pigpio.once('error', reject);\n    });\n\n    let retry = function(){\n        node.error('retry');\n        pigpio.end();\n        pigpio.killed = true;\n        startPigpioClient(host);\n    };\n\n    context.to = setTimeout(retry, pigpioConnectTimeout);\n\n    ready\n        .then(async (info) => {\n            if (!pigpio.killed){\n                // display information on pigpio and connection status\n                global.set('pigpio_'+host, pigpio);\n                pigpio.restartPigpioClient = restartPigpioClient;\n                clearTimeout(context.to);\n                to = null;\n                //console.log(JSON.stringify(info,null,2));\n                node.warn('ready');\n                node.send({payload:'ready', host: host});\n            } else {\n                node.warn('got ready from dead instance');\n                pigpio.end();\n            }\n        })\n        .catch((e)=>{\n            node.error(e);\n            if (!pigpio.killed){\n                node.send({payload:{error:e}});\n                node.warn('retrying pigpio connect');\n                setTimeout(retry, pigpioConnectTimeout);\n            } else {\n                node.warn('got error from dead instance');\n            }\n        });\n}\n\n\n\n\n",
+        "finalize": "// Code added here will be run when the\n// node is being stopped or re-deployed.\n\nlet host = context.host;\nlet pigpio = global.get('pigpio_'+host);\n\nstopPigpioClient(host);\n\nasync function stopPigpioClient(host) {\n    let pigpio = global.get('pigpio_'+host);\n    if (pigpio){\n        pigpio.end();\n        global.set('pigpio_'+host, undefined);\n    }\n}\n\n",
+        "libs": [],
+        "x": 140,
+        "y": 160,
+        "wires": [
+            [
+                "aaaf9ee79df73205",
+                "78d8f14d820bc04f"
+            ]
+        ]
+    },
+    {
+        "id": "ed1c067f3c7b7e12",
+        "type": "debug",
+        "z": "bacdbd8243ba188e",
+        "name": "",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1030,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "ab89301d0d057a39",
+        "type": "function",
+        "z": "bacdbd8243ba188e",
+        "name": "encoder init",
+        "func": "\nif (msg.payload === 'end'){\n    close();\n    return;\n}\n\nlet host = msg.host;\nif (!host){\n    host = context.host;\n}\ncontext.host = host;\n\nif (!host){\n    node.warn('no host');\n    return;\n}\n\nlet pigpio = global.get('pigpio_'+host);\n\n\nif (!pigpio){\n    node.warn('no pigpio open');\n    return;\n}\n\n\nlet params = flow.get('wheelsensors');\n\nif (!params){\n    node.error('no flow.wheelsensors');\n    return;\n}\n\nfunction close(){\n    let params = flow.get('wheelsensors');\n    if (params){\n        if (params.enc1){\n            params.enc1.close();\n            delete params.enc1;\n        }\n        if (params.enc2){\n            params.enc2.close();\n            delete params.enc2;\n        }\n    }\n}\n\n\nif ((msg.payload === 'ready') || (msg.payload === 'readd')){\n    addEncoders();\n}\n    \n    \nasync function addEncoders(){\n  close();\n  \n/*  { left: ...\n      right:{\n        gpiA: 9,\n        gpiB: 23,\n        mPerStep: (64/1000)/4,\n        glitch: 1000,\n    },\n*/    \n\n\n  let params = flow.get('wheelsensors');\n  \n  let opts = { /*min:-3, max:5, wrap:true*/ glitch: params.left.glitch };\n  //opts = {};\n  \n  params.enc1 = await pigpio.encoder(params.left.gpiA, params.left.gpiB, opts, (posn, inc, dur, tick)=>{\n    let speed_m_s = 0;\n    if (inc === -1)\n      speed_m_s = -params.left.mPerStep/(dur/1000000);\n    if (inc === 1)\n      speed_m_s = params.left.mPerStep/(dur/1000000);\n    posn *= params.left.mPerStep;\n    node.send({topic:'left', payload:{posn, inc, dur, tick}})\n    //node.warn(`1: posn ${posn} dur ${dur} at ${tick} m/s:${speed_m_s}`);    \n  });\n  node.warn('added enc1');\n  \n  opts = { /*min:-3, max:5, wrap:true*/ glitch: params.right.glitch };\n  params.enc2 = await pigpio.encoder(params.right.gpiA, params.right.gpiB, opts, (posn, inc, dur, tick)=>{\n    let speed_m_s = 0;\n    if (inc === -1)\n      speed_m_s = -params.right.mPerStep/(dur/1000000);\n    if (inc === 1)\n      speed_m_s = params.right.mPerStep/(dur/1000000);\n    posn *= params.right.mPerStep;\n    node.send({topic:'right', payload:{posn, inc, dur, tick}})\n      \n    //node.warn(`2: posn ${posn} dur ${dur} at ${tick} m/s:${speed_m_s}`);\n  });\n  node.warn('added enc2');\n    \n}\n\n\n// first message 'ready' will cause it to send the current posn\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 750,
+        "y": 100,
+        "wires": [
+            [
+                "ed1c067f3c7b7e12",
+                "99b0d806983e6e1a"
+            ]
+        ]
+    },
+    {
+        "id": "d3f905620435a81e",
+        "type": "function",
+        "z": "bacdbd8243ba188e",
+        "name": "",
+        "func": "let host = 'localhost';\nlet pigpio = global.get('pigpio_'+host);\n\nif (pigpio){\n    pigpio.restartPigpioClient();\n}\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 250,
+        "y": 260,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "b5200b536bde46ae",
+        "type": "inject",
+        "z": "bacdbd8243ba188e",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 110,
+        "y": 260,
+        "wires": [
+            [
+                "d3f905620435a81e"
+            ]
+        ]
+    },
+    {
+        "id": "aaaf9ee79df73205",
+        "type": "function",
+        "z": "bacdbd8243ba188e",
+        "name": "addEncoder",
+        "func": "if (msg.payload === 'ready'){\n    let pigpio = global.get('pigpio_'+msg.host);\n    addEncoder(pigpio);\n    node.send(msg);\n    return;\n}\n\nfunction addEncoder(pigpio_instance){\n  pigpio_instance.encoder = async function(a, b, opts, cb) {\n    /*\n\n                 +---------+         +---------+      0\n                 |         |         |         |\n       A         |         |         |         |\n                 |         |         |         |\n       +---------+         +---------+         +----- 1\n\n           +---------+         +---------+            0\n           |         |         |         |\n       B   |         |         |         |\n           |         |         |         |\n       ----+         +---------+         +---------+  1\n\n    */\n    if (typeof opts === 'function'){\n      cb = opts;\n      opts = null;\n    }\n    \n    opts = opts || {};\n    let defaultopts = {\n      glitch: 1000,\n      mode: 0,\n      min: undefined,\n      max: undefined,\n      wrap: false,\n    };\n    \n    let vals = Object.assign({}, defaultopts, opts);\n\n    const PI_TIMEOUT = 2;\n    const RED_MODE_DETENT = 1;\n    const transits = [\n      /* 0000 0001 0010 0011 0100 0101 0110 0111 */\n          0,  -1,   1,   0,   1,   0,   0,  -1,\n      /* 1000 1001 1010 1011 1100 1101 1110 1111 */\n         -1,   0,   0,   1,   0,   1,  -1,   0\n    ];\n    \n    let encoder = {\n      \n      data: {\n        gpioA: a,\n        gpioB: b,\n        \n        cb: cb, // callback\n\n        levA: 0,\n        levB: 0,\n\n        oldState: 0,\n\n        glitch: vals.glitch,\n        mode: vals.mode,\n        step: 0,\n        \n        div: 1,\n        \n        min: vals.min,\n        max: vals.max,\n        wrap: vals.wrap,\n        \n        lasttick:0,\n\n      },\n        \n      reset: function(step){\n        step = step || 0;\n        step = (step * this.data.div) >> 0;\n        node.warn('reset encoder step to '+step);\n        this.data.step = step;\n      },\n\n      // called for each GPI independently\n      notify: function(type, level, tick){\n        let detent = -1;\n        let newposn = -1;\n        let inc = 0;\n        if (level != PI_TIMEOUT){\n          if (type === 0)\n            this.data.levA = level;\n          else\n            this.data.levB = level;\n          let newState = this.data.levA << 1 | this.data.levB;\n          inc = transits[this.data.oldState << 2 | newState];\n          if (inc) {\n            this.data.oldState = newState;\n            detent = (this.data.step / this.data.div)>>0;\n            this.data.step += inc;\n            newposn = (this.data.step / this.data.div)>>0;\n          } \n        }\n\n        // handle min/max/wrap\n        if ((this.data.min !== undefined) ||\n            (this.data.max !== undefined)){\n          if (this.data.min !== undefined && newposn < this.data.min){\n            let newval = this.data.min * this.data.div;\n            if (this.data.wrap && this.data.max !== undefined){\n              newval = (this.data.max * this.data.div) - 1;\n            }\n            this.data.step = newval;\n            newposn = (this.data.step / this.data.div)>>0;\n          }\n          if (this.data.max !== undefined && newposn >= this.data.max){\n            let newval = this.data.max * this.data.div;\n            if (this.data.wrap && this.data.min !== undefined){\n              newval = (this.data.min * this.data.div);\n            }\n            this.data.step = newval;\n            newposn = (this.data.step / this.data.div)>>0;\n          }\n        }\n\n        // note, we always call back if PI_TIMEOUT\n        // and if not, there should always be a change?\n        if (this.data.cb) {\n          if (detent !== (this.data.step / this.data.div)>>0) {\n            if (this.data.cb){\n              this.data.cb((this.data.step / this.data.div)>>0, inc, tick - this.data.lasttick, tick);\n            }\n          }\n        }\n        this.data.lasttick = tick;\n      },\n      pigpio: pigpio_instance,\n      \n      close: function(){\n          if (this.clk){\n            this.clk.endNotify();\n          }\n          if (this.dt){\n            this.dt.endNotify();\n          }\n          delete this.clk;\n          delete this.dt;\n      },\n    };\n    \n    \n    if (encoder.data.mode === RED_MODE_DETENT) {\n      encoder.data.div = 4;\n    }\n    \n    // get events from a button on GPIO 17\n    const clk = this.gpio(encoder.data.gpioA);\n    encoder.data.clk = clk;\n    const dt = this.gpio(encoder.data.gpioB);\n    encoder.data.dt = dt;\n    await clk.modeSet('input');\n    await dt.modeSet('input');  \n    await clk.glitchSet(encoder.data.glitch);\n    await dt.glitchSet(encoder.data.glitch);\n\n    clk.notify((level, tick)=> {\n      encoder.notify(0, level, tick);\n    });\n    dt.notify((level, tick)=> {\n      encoder.notify(1, level, tick);\n    });\n    \n    return encoder;\n  };\n}\n\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 310,
+        "y": 160,
+        "wires": [
+            [
+                "59bb7b7532e5e0e9"
+            ]
+        ]
+    },
+    {
+        "id": "1f05b1e155da0bc1",
+        "type": "inject",
+        "z": "bacdbd8243ba188e",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "end",
+        "payloadType": "str",
+        "x": 330,
+        "y": 120,
+        "wires": [
+            [
+                "ab89301d0d057a39"
+            ]
+        ]
+    },
+    {
+        "id": "807ac2b44ea6b46b",
+        "type": "inject",
+        "z": "bacdbd8243ba188e",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "readd",
+        "payloadType": "str",
+        "x": 320,
+        "y": 80,
+        "wires": [
+            [
+                "ab89301d0d057a39"
+            ]
+        ]
+    },
+    {
+        "id": "78d8f14d820bc04f",
+        "type": "function",
+        "z": "bacdbd8243ba188e",
+        "name": "setparams",
+        "func": "let require = global.get('require');\n\nlet process = require('process');\n\nprocess.env['DEBUG'] = 'pigpio';\n\n\nlet params = {\n    wheelbase_m: 0.095, // 9.5cm\n    left:{\n        gpiA: 10,\n        gpiB: 22,\n        mPerStep: (64/1000)/4,\n        glitch: 1000,\n    },\n    right:{\n        gpiA: 9,\n        gpiB: 23,\n        mPerStep: (64/1000)/4,\n        glitch: 1000,\n    },\n};\n\nflow.set('wheelsensors', params);\n\n\nlet motor_params = {\n    left:{\n        enb: 4,\n        gpoA: 14,\n        gpoB: 15,\n    },\n    right:{\n        enb: 17,\n        gpoA: 18,\n        gpoB: 27,\n    },\n};\n\nflow.set('motors', motor_params);\n\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 270,
+        "y": 40,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "ff1bf397609665d0",
+        "type": "inject",
+        "z": "bacdbd8243ba188e",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 100,
+        "y": 40,
+        "wires": [
+            [
+                "78d8f14d820bc04f"
+            ]
+        ]
+    },
+    {
+        "id": "99b0d806983e6e1a",
+        "type": "function",
+        "z": "bacdbd8243ba188e",
+        "name": "integratePosn",
+        "func": "let params = flow.get('wheelsensors');\n\nlet vals = flow.get('wheelsensor_posn') || {\n    left:0,\n    right:0,\n\n    last_left:0,\n    last_right:0,\n\n    x:0,\n    y:0,\n    theta:0,\n};\n\nvals.last_left = vals.left;\nvals.last_right = vals.right;\n\nflow.set('wheelsensor_posn', vals);\n\nswitch(msg.topic){\n    case 'left':\n        vals.left = msg.payload.posn;\n        break;\n    case 'right':\n        vals.right = msg.payload.posn;\n        break;\n}\n\nlet d_left = vals.left - vals.last_left;\nlet d_right = vals.right - vals.last_right;\nlet d_center = (d_left+d_right)/2;\n\nlet new_x = vals.x + ( d_center * Math.cos( vals.theta ) );\nlet new_y = vals.y + ( d_center * Math.sin( vals.theta ) );\n\n//node.warn(vals);\n//node.warn(`d_right ${d_right} d_left ${d_left}`);\n//node.warn(params.wheelbase_m);\n\n\nlet sinDTheta = ( d_right - d_left ) / params.wheelbase_m;\nif (Math.abs(sinDTheta) > 1){\n    node.error('Wheel moved by more than wheelbase!!!');\n    return;\n}\n\n//node.warn(sinDTheta);\nlet dTheta = Math.asin(sinDTheta);\n//node.warn(dTheta);\n\nlet new_theta = vals.theta + dTheta;\n//double cycleAngle = asin((distanceRight-distanceLeft)/WHEEL_BASE);\n\nif (new_theta < 0) new_theta += Math.PI*2;\nif (new_theta > Math.PI*2) new_theta -= Math.PI*2;\n\nvals.theta = new_theta;\nvals.x = new_x;\nvals.y = new_y;\n\nreturn { payload: { x:new_x, y:new_y, theta:new_theta }};",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 500,
+        "y": 240,
+        "wires": [
+            [
+                "e650b659d06778a3",
+                "08d94a400439e608"
+            ]
+        ]
+    },
+    {
+        "id": "e650b659d06778a3",
+        "type": "debug",
+        "z": "bacdbd8243ba188e",
+        "name": "",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 670,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "54c0cf9572a12a0d",
+        "type": "inject",
+        "z": "bacdbd8243ba188e",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 130,
+        "y": 360,
+        "wires": [
+            [
+                "a3408b3d8e1c9fd0"
+            ]
+        ]
+    },
+    {
+        "id": "a3408b3d8e1c9fd0",
+        "type": "function",
+        "z": "bacdbd8243ba188e",
+        "name": "reset posn",
+        "func": "\n\nlet params = flow.get('wheelsensors');\n\n\nlet vals = flow.get('wheelsensor_posn') || {\n    left:0,\n    right:0,\n\n    last_left:0,\n    last_right:0,\n\n    x:0,\n    y:0,\n    theta:0,\n};\n\n\nif (params){\n    if (params.enc1){\n        params.enc1.reset();\n    }\n    if (params.enc2){\n        params.enc2.reset();\n    }\n}\n\nvals.left = 0;\nvals.right = 0;\nvals.last_left = 0;\nvals.last_right = 0;\nvals.x = 0;\nvals.y = 0;\nvals.theta = 0;\n\nmsg.payload = 'reset';\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 330,
+        "y": 360,
+        "wires": [
+            [
+                "99b0d806983e6e1a"
+            ]
+        ]
+    },
+    {
+        "id": "08d94a400439e608",
+        "type": "link out",
+        "z": "bacdbd8243ba188e",
+        "name": "Odometry",
+        "mode": "link",
+        "links": [
+            "ab80515648bb17f0"
+        ],
+        "x": 605,
+        "y": 360,
+        "wires": []
+    },
+    {
+        "id": "59bb7b7532e5e0e9",
+        "type": "function",
+        "z": "bacdbd8243ba188e",
+        "name": "addMotors",
+        "func": "if (msg.payload === 'ready'){\n    let pigpio = global.get('pigpio_'+msg.host);\n    addMotor(pigpio);\n    node.send(msg);\n    return;\n}\n\nfunction addMotor(pigpio_instance){\n  pigpio_instance.pwmMotor = async function(pwm, a, b, opts) {\n    // intent:\n    // setup 3 output GPOs, the first as PWM, then a and b are the pins controlling direction.\n      \n      \n    opts = opts || {};\n    let defaultopts = {\n    };\n    \n    let motor = {\n        \n        data: {\n            pwm: pwm,\n            gpioA: a,\n            gpioB: b,\n            freq: 20, //hz\n            \n            currA: 0,\n            currB: 0,\n            currPwm: 0,\n        },\n        \n        gpos:{\n            pwm: null,\n            gpioA: null,\n            gpioB: null,\n        },\n        \n        reset: function(){\n            // ensure we send and set these to the correct last value.\n            this.data.currPwm = -1;\n            this.data.currA = -1;\n            this.data.currB = -1;\n            this.set(0);\n        },\n        \n        close: async function(){\n            this.reset();\n        },\n\n        // set speed (power) of this motor - range -1 to 1\n        set: async function(speed){\n            if (speed < -1) speed = -1;\n            if (speed > 1) speed = 1;\n            \n            let a, b, pwm;\n            \n            if (speed === 0){\n                a = 0;\n                b = 0;\n                pwm = 0;\n            } else {\n                pwm = (speed*255)>>0;\n                if (speed < 0){\n                    pwm = ((-speed)*255)>>0;\n                }\n\n                if (speed < 0){\n                    a = 0;\n                    b = 1;\n                } else {\n                    a = 1;\n                    b = 0;\n                }\n            }\n            if (this.data.currPwm !== pwm){\n                await motor.gpos.pwm.analogWrite(pwm);\n                this.data.currPwm = pwm;\n            }\n            if (this.data.currA !== a){\n                await motor.gpos.gpioA.write(a);\n                this.data.currA = a;\n            }\n            if (this.data.currB !== b){\n                await motor.gpos.gpioB.write(b);\n                this.data.currB = b;\n            }\n        },\n    };\n\n\n    node.warn(motor);\n    \n\n    // get events from a button on GPIO 17\n    console.log('go for '+motor.data.gpioA);\n    motor.gpos.gpioA = this.gpio(motor.data.gpioA);\n    console.log('go for '+motor.data.gpioB);\n    motor.gpos.gpioB = this.gpio(motor.data.gpioB);\n    console.log('go for '+motor.data.pwm);\n    motor.gpos.pwm = this.gpio(motor.data.pwm);\n    \n    await motor.gpos.pwm.setPWMfrequency(motor.data.freq);\n    await motor.gpos.pwm.analogWrite(0);\n    await motor.gpos.pwm.modeSet('output');\n    await motor.gpos.gpioA.write(0);\n    await motor.gpos.gpioA.modeSet('output');\n    await motor.gpos.gpioB.write(0);\n    await motor.gpos.gpioB.modeSet('output');\n    motor.reset();\n\n    return motor;\n  };\n}\n\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 310,
+        "y": 200,
+        "wires": [
+            [
+                "14df4ed6ee341f15"
+            ]
+        ]
+    },
+    {
+        "id": "14df4ed6ee341f15",
+        "type": "function",
+        "z": "bacdbd8243ba188e",
+        "name": "motorsInit",
+        "func": "\nif (msg.payload === 'end'){\n    close();\n    return;\n}\n\nlet host = msg.host;\nif (!host){\n    host = context.host;\n}\ncontext.host = host;\n\nif (!host){\n    node.warn('no host');\n    return;\n}\n\nlet pigpio = global.get('pigpio_'+host);\n\n\nif (!pigpio){\n    node.warn('no pigpio open');\n    return;\n}\n\n\nlet params = flow.get('motors');\n\nif (!params){\n    node.error('no flow.motors');\n    return;\n}\n\nfunction close(){\n    let params = flow.get('motors');\n    if (params){\n        if (params.motorLeft){\n            params.motorLeft.close();\n            delete params.motorLeft;\n        }\n        if (params.motorRight){\n            params.motorRight.close();\n            delete params.motorRight;\n        }\n    }\n}\n\n\nif ((msg.payload === 'ready') || (msg.payload === 'readd')){\n    addMotors();\n}\n    \n    \nasync function addMotors(){\n    try{\n        close();\n        \n        /*  left:{\n            enb: 4,\n            gpoA: 14,\n            gpoB: 15,\n        },\n        */    \n        \n        \n        let params = flow.get('motors');\n        \n        let opts = { };\n        //opts = {};\n        \n        params.motorLeft = await pigpio.pwmMotor(params.left.enb, params.left.gpoA, params.left.gpoB, opts);\n        params.motorRight = await pigpio.pwmMotor(params.right.enb, params.right.gpoA, params.right.gpoB, opts);\n        node.warn('added motors');\n    } catch(e){\n      node.error(e);  \n    }\n}\n\n\n// first message 'ready' will cause it to send the current posn\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 530,
+        "y": 160,
+        "wires": [
+            [
+                "ab89301d0d057a39"
+            ]
+        ]
+    },
+    {
+        "id": "5fe8df4d87a7ecac",
+        "type": "function",
+        "z": "bacdbd8243ba188e",
+        "name": "set Left Speed",
+        "func": "let params = flow.get('motors');\n\nif (!params){\n    return;\n}\n\nif (!params.motorLeft || !params.motorRight){\n    return;\n    \n}\n\nswitch(msg.topic){\n    case 'left':\n        params.motorLeft.set(msg.payload);\n    break;\n    case 'right':\n        params.motorRight.set(msg.payload);\n    break;\n    case 'both':\n        params.motorLeft.set(msg.payload);\n        params.motorRight.set(msg.payload);\n    break;\n    \n}\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 460,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "aa44ff1eb4b283a3",
+        "type": "inject",
+        "z": "bacdbd8243ba188e",
+        "name": "stopboth",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "both",
+        "payload": "0",
+        "payloadType": "num",
+        "x": 130,
+        "y": 480,
+        "wires": [
+            [
+                "5fe8df4d87a7ecac"
+            ]
+        ]
+    },
+    {
+        "id": "a92be63e48267d37",
+        "type": "inject",
+        "z": "bacdbd8243ba188e",
+        "name": "fwdleft 0.4",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "left",
+        "payload": "0.4",
+        "payloadType": "num",
+        "x": 100,
+        "y": 540,
+        "wires": [
+            [
+                "5fe8df4d87a7ecac"
+            ]
+        ]
+    },
+    {
+        "id": "880449680ec285ce",
+        "type": "inject",
+        "z": "bacdbd8243ba188e",
+        "name": "bwdleft 0.6",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "left",
+        "payload": "-0.6",
+        "payloadType": "num",
+        "x": 100,
+        "y": 580,
+        "wires": [
+            [
+                "5fe8df4d87a7ecac"
+            ]
+        ]
+    },
+    {
+        "id": "0f90d441a93eb98b",
+        "type": "inject",
+        "z": "bacdbd8243ba188e",
+        "name": "fwdboth 0.4",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "both",
+        "payload": "0.4",
+        "payloadType": "num",
+        "x": 110,
+        "y": 620,
+        "wires": [
+            [
+                "5fe8df4d87a7ecac"
+            ]
+        ]
+    },
+    {
+        "id": "ac9c8a7e82b24a6c",
+        "type": "inject",
+        "z": "bacdbd8243ba188e",
+        "name": "bwdboth 0.6",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "both",
+        "payload": "-0.6",
+        "payloadType": "num",
+        "x": 110,
+        "y": 660,
+        "wires": [
+            [
+                "5fe8df4d87a7ecac"
+            ]
+        ]
+    }
+]

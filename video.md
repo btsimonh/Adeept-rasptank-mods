@@ -2,8 +2,8 @@
 
 ##Summary:
 
-On RPi3b with bullseye, ~45% cpu to stream h264 to webrtc with decent low latency with raw video frames passing through OpenCV (640x480).  ~1.5Mbits
-(648x480@25 -> ~45%cpu on node)
+On RPi3b with bullseye, ~25% cpu to stream h264 to webrtc with decent low latency with raw video frames passing through OpenCV (640x480).  ~1.5Mbits
+(648x480@25 -> ~25%cpu on node)
 (648x480@60 -> ~98%cpu on node)
 
 using @u4/opencv4nodejs to build opencv (~2.5 hours, make swap 2048 first).
